@@ -141,20 +141,21 @@ final class Utils {
 	}
 
 	static boolean checkIfDomainsAreVerified(Context context) {
-		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-			return true;
-		}
-
-		DomainVerificationManager manager =
-			context.getSystemService(DomainVerificationManager.class);
-		try {
-			DomainVerificationUserState userState =
-				manager.getDomainVerificationUserState(context.getPackageName());
-
-			return areAllDomainsVerifiedOrSelected(userState.getHostToStateMap());
-		} catch (PackageManager.NameNotFoundException e) {
-			warn(e, "Error while getting package name");
-		}
+		// Removing link domain verification
+//		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+//			return true;
+//		}
+//
+//		DomainVerificationManager manager =
+//			context.getSystemService(DomainVerificationManager.class);
+//		try {
+//			DomainVerificationUserState userState =
+//				manager.getDomainVerificationUserState(context.getPackageName());
+//
+//			return areAllDomainsVerifiedOrSelected(userState.getHostToStateMap());
+//		} catch (PackageManager.NameNotFoundException e) {
+//			warn(e, "Error while getting package name");
+//		}
 		return true;
 	}
 
