@@ -346,7 +346,7 @@ public class EmbeddedBrowserActivity extends Activity {
 			log(this, "MobileVitV2 :: Inference complete. isSuspicious=%s", multiResult.isSuspicious);
 
 			// Display visual toast
-			toast(toastMsg.toString());
+//			toast(toastMsg.toString());
 
 			String script =
 				"(function(){var d=" + detail.toString() + ";" +
