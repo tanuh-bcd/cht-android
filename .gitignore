@@ -1,0 +1,23 @@
+/.gradle/
+/build/
+/*.log
+
+/local.properties
+
+# IntelliJ IDEA files
+/.idea/
+*.iml
+
+secrets*.tar.gz
+*.keystore
+*_private_key.pepk
+playstore-secret.json
+pepk.jar
+
+fastlane/*
+!fastlane/Fastfile
+
+.DS_Store
+.classpath
+.project
+.settings

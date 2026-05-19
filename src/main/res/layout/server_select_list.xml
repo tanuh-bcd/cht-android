@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/serverSelectListLayout"
+  android:layout_width="fill_parent"
+  android:layout_height="fill_parent"
+  android:fitsSystemWindows="true"
+  android:orientation="vertical">
+
+  <ImageView
+    android:id="@+id/tanuhLogo"
+    android:layout_width="128dp"
+    android:layout_height="128dp"
+    android:layout_gravity="center_horizontal"
+    android:layout_marginTop="16dp"
+    android:adjustViewBounds="true"
+    android:contentDescription="@string/app_name"
+    android:src="@drawable/tanuh_logo" />
+
+  <EditText
+    android:id="@+id/instanceSearchBox"
+    android:layout_width="fill_parent"
+    android:layout_height="wrap_content"
+    android:autofillHints=""
+    android:hint="@string/instancesSearch"
+    android:inputType="textUri"
+    android:padding="32dp" />
+
+  <ListView
+    android:id="@+id/lstServers"
+    android:layout_width="fill_parent"
+    android:layout_height="0dp"
+    android:layout_weight="1"
+    android:orientation="vertical" />
+
+  <Button
+    android:id="@+id/btnLogout"
+    style="@style/standardButton"
+    android:layout_gravity="center_horizontal"
+    android:layout_marginBottom="16dp"
+    android:onClick="logout"
+    android:text="@string/btnLogout" />
+</LinearLayout>

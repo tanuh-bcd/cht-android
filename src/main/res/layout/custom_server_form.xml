@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools"
+  android:id="@+id/customServerFormLayout"
+  android:layout_width="fill_parent"
+  android:layout_height="fill_parent"
+  android:fitsSystemWindows="true"
+  android:orientation="vertical"
+  android:paddingLeft="16dp"
+  android:paddingRight="16dp">
+
+  <ImageView
+    android:id="@+id/tanuhLogo"
+    android:layout_width="160dp"
+    android:layout_height="160dp"
+    android:layout_centerHorizontal="true"
+    android:layout_marginTop="24dp"
+    android:adjustViewBounds="true"
+    android:contentDescription="@string/app_name"
+    android:src="@drawable/tanuh_logo" />
+
+  <EditText
+    android:id="@+id/txtAppUrl"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_below="@+id/tanuhLogo"
+    android:layout_marginTop="16dp"
+    android:autofillHints=""
+    android:hint="@string/txtAppUrl"
+    android:inputType="textUri"
+    android:padding="32dp"
+    android:textSize="18sp" />
+  <!-- OnClick is ignored because lint generates error
+	     incorrectly.  Test with future build tool versions
+	     to see if this exception can be removed -->
+  <Button
+    android:id="@+id/btnCancelSettings"
+    style="@style/standardButton"
+    android:layout_alignParentBottom="true"
+    android:layout_toStartOf="@+id/btnLogout"
+    android:onClick="cancelSettingsEdit"
+    android:text="@string/btnCancel"
+    tools:ignore="OnClick,UsingOnClickInXml" />
+  <Button
+    android:id="@+id/btnLogout"
+    style="@style/standardButton"
+    android:layout_alignParentBottom="true"
+    android:layout_toStartOf="@+id/btnSaveSettings"
+    android:onClick="logout"
+    android:text="@string/btnLogout"
+    tools:ignore="OnClick,UsingOnClickInXml" />
+  <!-- OnClick is ignored because lint generates error
+	     incorrectly.  Test with future build tool versions
+	     to see if this exception can be removed -->
+  <Button
+    android:id="@+id/btnSaveSettings"
+    style="@style/standardButton"
+    android:layout_alignParentEnd="true"
+    android:layout_alignParentBottom="true"
+    android:onClick="verifyAndSave"
+    android:text="@string/btnSave"
+    tools:ignore="OnClick,UsingOnClickInXml" />
+</RelativeLayout>
