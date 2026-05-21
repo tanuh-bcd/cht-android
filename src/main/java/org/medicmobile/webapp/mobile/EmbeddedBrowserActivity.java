@@ -332,12 +332,12 @@ public class EmbeddedBrowserActivity extends Activity {
 				double prob = (res.probs.length > 1) ? res.probs[1] : res.probs[0];
 				
 				JSONObject m = new JSONObject();
-				m.put("model", modelPath);
+				m.put("model", shortModelDisplayName(modelPath));
 				m.put("probability", prob);
 				m.put("label", res.label);
 				modelScores.put(m);
 
-				String modelName = modelPath.substring(modelPath.lastIndexOf('/') + 1).replace(".onnx", "");
+				String modelName = shortModelDisplayName(modelPath);
 				toastMsg.append(String.format(java.util.Locale.UK, "\n• %s: %.4f", modelName, prob));
 			}
 			detail.put("modelScores", modelScores);
@@ -366,11 +366,74 @@ public class EmbeddedBrowserActivity extends Activity {
 	 * Fills v3 paginated form paths: {@code /data/photo_N_page/ai_photo_N_label|score}, {@code /data/group_summary/ai_analysis_*}.
 	 * Slot N is taken from {@code d.pageUrl} when it matches {@code photo_N_page}, else round-robin.
 	 */
+	/** Display label for ONNX assets, e.g. {@code model 6} from {@code ..._(model6).onnx}. */
+	private static String shortModelDisplayName(String modelPath) {
+		String base = modelPath.substring(modelPath.lastIndexOf('/') + 1);
+		base = base.replaceAll("(?i)\\.onnx$", "");
+		java.util.regex.Matcher paren = java.util.regex.Pattern
+				.compile("\\(model([^)]+)\\)", java.util.regex.Pattern.CASE_INSENSITIVE)
+				.matcher(base);
+		if (paren.find()) {
+			return "model " + paren.group(1);
+		}
+		java.util.regex.Matcher m = java.util.regex.Pattern
+				.compile("model([0-9]+(?:-[0-9]+)?)", java.util.regex.Pattern.CASE_INSENSITIVE)
+				.matcher(base);
+		if (m.find()) {
+			return "model " + m.group(1);
+		}
+		return base;
+	}
+
 	private static String oralCancerAssessmentFormFillJavascript() {
 		return
 			"try{" +
 			"(function(){" +
-			"function chtSetXformPath(path,val){" +
+			"var NL=String.fromCharCode(10);" +
+			"var PHOTO_SEP=' ||    ';" +
+			"var SCORE_SEP='; ';" +
+			"function stripOnnx(name){" +
+			"var s=String(name||'');" +
+			"var low=s.toLowerCase(),idx=low.indexOf('.onnx');" +
+			"while(idx>=0){s=s.substring(0,idx)+s.substring(idx+5);low=s.toLowerCase();idx=low.indexOf('.onnx');}" +
+			"return s;}" +
+			"function chtFieldHint(el){" +
+			"var parts=[];" +
+			"for(var node=el;node;node=node.parentElement){" +
+			"parts.push(node.className||'');" +
+			"parts.push(node.getAttribute('appearance')||'');" +
+			"parts.push(node.getAttribute('data-appearance')||'');}" +
+			"return parts.join(' ');}" +
+			"function chtIsMultilineField(el){" +
+			"if(!el)return false;" +
+			"if(el.tagName==='TEXTAREA')return true;" +
+			"if(/multiline/i.test(chtFieldHint(el)))return true;" +
+			"if(el.tagName==='INPUT'){" +
+			"var rows=parseInt(el.getAttribute('rows')||'0',10);" +
+			"if(rows>1)return true;}" +
+			"return false;}" +
+			"function chtValueForElement(el,val,path){" +
+			"if(typeof val!=='string')return val;" +
+			"val=stripOnnx(val);" +
+			"if(path&&path.indexOf('ai_analysis_summary')>=0){return val;}" +
+			"if(chtIsMultilineField(el)){" +
+			"return val.split('\\\\n').join(NL).split('\\r\\n').join(NL).split('\\r').join(NL);}" +
+			"return val.replace(/[\\r\\n]+/g,' ').replace(/\\s+/g,' ').trim();}" +
+			"function chtSetElementValue(el,val,path){" +
+			"if(!el)return;" +
+			"var v=chtValueForElement(el,val,path);" +
+			"try{" +
+			"if(el.tagName==='INPUT'&&window.HTMLInputElement){" +
+			"var inputSetter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;" +
+			"if(inputSetter){inputSetter.call(el,v);}else{el.value=v;}" +
+			"}else if(el.tagName==='TEXTAREA'&&window.HTMLTextAreaElement){" +
+			"var taSetter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;" +
+			"if(taSetter){taSetter.call(el,v);}else{el.value=v;}" +
+			"}else{el.value=v;}" +
+			"}catch(eSet){el.value=v;}" +
+			"el.dispatchEvent(new Event('input',{bubbles:true}));" +
+			"el.dispatchEvent(new Event('change',{bubbles:true}));}" +
+			"function chtSetXformPath(path,val,multilineOnly){" +
 			"if(val===undefined||val===null)return;" +
 			"var leaf = path.split('/').pop();" +
 			"var pathNoSlash = path.startsWith('/') ? path.substring(1) : path;" +
@@ -378,19 +441,27 @@ public class EmbeddedBrowserActivity extends Activity {
 			"var selectors = [" +
 			" '[name=\"'+path+'\"]'," +
 			" '[name=\"'+pathNoSlash+'\"]'," +
-			" '[name=\"'+leaf+'\"]'," +
-			" '[name$=\"/'+leaf+'\"]'," +
 			" '[name=\"'+pathEnketo+'\"]'," +
+			" '[name$=\"/'+leaf+'\"]'," +
 			" '[name$=\"['+leaf+']\"]'" +
 			"];" +
-			"var el = null; for(var i=0; i<selectors.length; i++){ el = document.querySelector(selectors[i]); if(el) break; }" +
-			"if(el){el.value=val;el.dispatchEvent(new Event('input',{bubbles:true}));" +
-			"el.dispatchEvent(new Event('change',{bubbles:true}));" +
-			"console.log('MobileVitV2 :: Set field '+path+' to '+val+' using selector '+selectors[i]); return;}" +
+			"var matched=[];" +
+			"for(var si=0;si<selectors.length;si++){" +
+			"document.querySelectorAll(selectors[si]).forEach(function(node){" +
+			"if(node&&matched.indexOf(node)<0)matched.push(node);});}" +
+			"var textareas=matched.filter(function(node){return node.tagName==='TEXTAREA';});" +
+			"var multilineInputs=matched.filter(chtIsMultilineField);" +
+			"var targets=textareas.length?textareas:(multilineInputs.length?multilineInputs:matched);" +
+			"if(multilineOnly){targets=targets.filter(chtIsMultilineField);if(!targets.length)targets=matched;}" +
+			"if(targets.length){" +
+			"targets.forEach(function(el){chtSetElementValue(el,val,path);});" +
+			"console.log('MobileVitV2 :: Set field '+path+' on '+targets.length+' element(s)');return;}" +
 			"if(window.jQuery){" +
-			"var $el = window.jQuery(selectors.join(','));" +
-			"if($el.length){$el.val(val).trigger('change');" +
-			"console.log('MobileVitV2 :: Set field '+path+' to '+val+' (jQuery)'); return;}" +
+			"var $all=window.jQuery(selectors.join(','));" +
+			"var $ml=$all.filter('textarea').add($all.filter('input').filter(function(){return chtIsMultilineField(this);}));" +
+			"var $el=(multilineOnly?$ml:$ml.length?$ml:$all).first();" +
+			"if($el.length){$el.val(chtValueForElement($el.get(0),val,path)).trigger('input').trigger('change');" +
+			"console.log('MobileVitV2 :: Set field '+path+' (jQuery)');return;}" +
 			"}" +
 			"console.warn('MobileVitV2 :: Could not find field for path: '+path);" +
 			"}" +
@@ -420,25 +491,41 @@ public class EmbeddedBrowserActivity extends Activity {
 			"done=Math.min(8,done+1);" +
 			"var gsum='/data/group_summary/';" +
 			"chtSetXformPath(gsum+'ai_analysis_status','Analyzed '+done+'/8 photos (latest: photo '+n+')');" +
+			"function shortModelName(modelLabel){" +
+			"var s=stripOnnx(String(modelLabel||''));" +
+			"if(!s)return s;" +
+			"if(/^model\\s+[0-9]/i.test(s))return s;" +
+			"var paren=s.match(/\\\\(model[^)]+\\\\)/i);" +
+			"if(paren){return 'model '+paren[0].replace(/[()]/g,'').replace(/^model/i,'').trim();}" +
+			"var m=s.match(/model([0-9]+(?:-[0-9]+)?)/i);" +
+			"return m?'model '+m[1]:s;}" +
+			"function formatPhotoBlock(photoNum,isSuspicious,modelScores){" +
+			"var verdict=isSuspicious?'Suspicious':'Normal';" +
+			"var block='Photo '+photoNum+': '+verdict;" +
+			"if(modelScores&&modelScores.length){" +
+			"var scores=modelScores.map(function(s){" +
+			"return shortModelName(s.model)+': '+s.probability.toFixed(2);}).join(SCORE_SEP);" +
+			"block+=' ('+scores+')';}" +
+			"return block;}" +
 			"var sumKey='cht_oral_ca_ml_summary_lines';" +
 			"var lines=[];try{lines=JSON.parse(sessionStorage.getItem(sumKey)||'[]');}catch(e2){lines=[];}" +
 			"if(!Array.isArray(lines))lines=[];" +
-			"var scoresSummary=d.modelScores.map(function(s){ " +
-			"  var name = s.model.substring(s.model.lastIndexOf('/')+1).replace('.onnx','');" +
-			"  return name + ': ' + s.probability.toFixed(4);" +
-			"}).join(' | ');" +
-			"var line='Photo '+n+': '+(d.isSuspicious?'SUSPICIOUS':'Normal')+' ['+scoresSummary+']';" +
-			"lines.push(line);" +
-			"if(lines.length>16)lines=lines.slice(-16);" +
+			"var line=formatPhotoBlock(n,d.isSuspicious,d.modelScores);" +
+			"var lineIdx=-1;" +
+			"for(var li=0;li<lines.length;li++){if(lines[li].indexOf('Photo '+n+':')===0){lineIdx=li;break;}}" +
+			"if(lineIdx>=0)lines[lineIdx]=line;else lines.push(line);" +
+			"lines.sort(function(a,b){" +
+			"var pa=parseInt((a.match(/^Photo (\\\\d+):/)||[0,0])[1],10);" +
+			"var pb=parseInt((b.match(/^Photo (\\\\d+):/)||[0,0])[1],10);return pa-pb;});" +
+			"if(lines.length>8)lines=lines.slice(-8);" +
 			"sessionStorage.setItem(sumKey,JSON.stringify(lines));" +
 			"var diagnosisKey='cht_oral_ca_any_suspicious';" +
 			"var currentDiagnosis=(sessionStorage.getItem(diagnosisKey)==='true')||d.isSuspicious;" +
 			"sessionStorage.setItem(diagnosisKey,String(currentDiagnosis));" +
-			"var summaryText=lines.join('\\n');" +
-			"if(done>=8){" +
-			"  summaryText+='\\n\\n\\nFINAL RESULT: '+(currentDiagnosis?'SUSPICIOUS':'NORMAL');" +
-			"}" +
+			"var summaryText=stripOnnx(lines.join(PHOTO_SEP));" +
+			"if(done>=8){summaryText+=PHOTO_SEP+'FINAL RESULT: '+(currentDiagnosis?'SUSPICIOUS':'NORMAL');}" +
 			"chtSetXformPath(gsum+'ai_analysis_summary',summaryText);" +
+			"setTimeout(function(){chtSetXformPath(gsum+'ai_analysis_summary',summaryText);},250);" +
 			"chtSetXformPath(gsum+'ai_final_diagnosis',currentDiagnosis?'suspicious':'non_suspicious');" +
 			"if(done>=8){" +
 			"  chtSetXformPath('/data/final_ai_analysis_page/final_ai_suspicion',currentDiagnosis?'suspicious':'non_suspicious');" +
