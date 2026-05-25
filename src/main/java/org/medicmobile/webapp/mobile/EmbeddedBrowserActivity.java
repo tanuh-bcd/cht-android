@@ -63,13 +63,34 @@ public class EmbeddedBrowserActivity extends Activity {
 	private boolean isMigrationRunning = false;
 	private MobileVitV2Engine mobileVitV2Engine;
 	private ExecutorService mobileVitExecutor;
-	/** Previous WebView URL; used to clear ML sessionStorage when leaving the oral cancer form. */
-	private String lastWebViewUrlForOralMl;
+	/** Previous WebView URL; used to clear ML sessionStorage when leaving a MobileViT-enabled form. */
+	private String lastWebViewUrlForMobileVit;
 
-	/**
-	 * MobileViTV2 runs only while this CHT form is active (matched as a substring of the WebView URL).
-	 */
-	private static final String MOBILEVIT_TARGET_FORM_ID = "oral_cancer_assessment";
+	/** Standalone oral cancer CHT form. */
+	private static final String MOBILEVIT_FORM_ORAL = "oral_cancer_assessment";
+	/** NCD full screening form ({@code oc_*} oral section). */
+	private static final String MOBILEVIT_FORM_NCD = "ncd";
+
+	private static final MobileVitFormFillConfig MOBILEVIT_FILL_ORAL = new MobileVitFormFillConfig(
+			"cht_oral_ca_ml",
+			"/data/photo_", "_page/",
+			"ai_photo_", "_suspicion",
+			"/data/group_summary/",
+			"ai_analysis_summary", "ai_analysis_status", "ai_analysis_error",
+			true, "ai_final_diagnosis",
+			"/data/final_ai_analysis_page/final_ai_suspicion",
+			"var m=u.match(/photo[_/](\\\\d+)[_/]page/i)||u.match(/photo[_-]?(\\\\d+)[_/]page/i);");
+
+	private static final MobileVitFormFillConfig MOBILEVIT_FILL_NCD = new MobileVitFormFillConfig(
+			"cht_ncd_ml",
+			"/data/oc_section_wrapper/oc_photo_", "_page/",
+			"oc_ai_photo_", "_suspicion",
+			"/data/oc_section_wrapper/oc_group_summary/",
+			"oc_ai_analysis_summary", "oc_ai_analysis_status", "oc_ai_analysis_error",
+			false, null,
+			"/data/oc_section_wrapper/oc_final_ai_analysis_page/oc_final_ai_suspicion",
+			"var m=u.match(/oc_photo[_-]?(\\\\d+)[_/]page/i)||u.match(/photo[_/](\\\\d+)[_/]page/i)"
+					+ "||u.match(/photo[_-]?(\\\\d+)[_/]page/i);");
 
 	private static final ValueCallback<String> IGNORE_RESULT = new ValueCallback<String>() {
 		public void onReceiveValue(String result) { /* ignore */ }
@@ -298,23 +319,40 @@ public class EmbeddedBrowserActivity extends Activity {
 		});
 	}
 
+	/** Resolves which MobileViT-enabled form is open from the WebView URL, or {@code null}. */
+	private static String resolveMobileVitFormId(String url) {
+		if (url == null) {
+			return null;
+		}
+		if (url.contains(MOBILEVIT_FORM_ORAL)) {
+			return MOBILEVIT_FORM_ORAL;
+		}
+		if (url.contains(MOBILEVIT_FORM_NCD)) {
+			return MOBILEVIT_FORM_NCD;
+		}
+		return null;
+	}
+
 	/**
-	 * True when the embedded app URL indicates the oral cancer assessment form is open.
+	 * True when the embedded app URL indicates a form that uses MobileViT photo analysis.
 	 */
 	private boolean isMobileVitTargetFormUrl() {
 		if (container == null) {
 			return false;
 		}
-		String url = container.getUrl();
-		return url != null && url.contains(MOBILEVIT_TARGET_FORM_ID);
+		return resolveMobileVitFormId(container.getUrl()) != null;
 	}
 
 	private void dispatchMobileVitPredictionToWebView(Uri imageUri, MobileVitV2Engine.MultiClassificationResult multiResult) {
 		try {
+			String formId = container != null ? resolveMobileVitFormId(container.getUrl()) : null;
+			if (formId == null) {
+				return;
+			}
 			JSONObject detail = new JSONObject();
 			detail.put("imageUri", imageUri.toString());
 			detail.put("isSuspicious", multiResult.isSuspicious);
-			detail.put("formId", MOBILEVIT_TARGET_FORM_ID);
+			detail.put("formId", formId);
 			if (container != null) {
 				detail.put("pageUrl", container.getUrl());
 			}
@@ -344,6 +382,7 @@ public class EmbeddedBrowserActivity extends Activity {
 
 			// Log to Logcat
 			log(this, "MobileVitV2 :: Inference complete. isSuspicious=%s", multiResult.isSuspicious);
+			log(this, toastMsg.toString());
 
 			// Display visual toast
 //			toast(toastMsg.toString());
@@ -354,7 +393,7 @@ public class EmbeddedBrowserActivity extends Activity {
 				"window.dispatchEvent(new CustomEvent('cht-mobilevit-prediction',{detail:d}));" +
 				"if(typeof window.onChtMobileVitPrediction==='function'){window.onChtMobileVitPrediction(d);}" +
 				"}catch(e){console.error(e);}" +
-				oralCancerAssessmentFormFillJavascript() +
+				mobileVitFormFillJavascriptForFormId(formId) +
 				"})();";
 			evaluateJavascript(script, false);
 		} catch (JSONException e) {
@@ -362,10 +401,6 @@ public class EmbeddedBrowserActivity extends Activity {
 		}
 	}
 
-	/**
-	 * Fills v3 paginated form paths: {@code /data/photo_N_page/ai_photo_N_label|score}, {@code /data/group_summary/ai_analysis_*}.
-	 * Slot N is taken from {@code d.pageUrl} when it matches {@code photo_N_page}, else round-robin.
-	 */
 	/** Display label for ONNX assets, e.g. {@code model 6} from {@code ..._(model6).onnx}. */
 	private static String shortModelDisplayName(String modelPath) {
 		String base = modelPath.substring(modelPath.lastIndexOf('/') + 1);
@@ -385,7 +420,21 @@ public class EmbeddedBrowserActivity extends Activity {
 		return base;
 	}
 
-	private static String oralCancerAssessmentFormFillJavascript() {
+	private static String mobileVitFormFillJavascriptForFormId(String formId) {
+		if (MOBILEVIT_FORM_NCD.equals(formId)) {
+			return mobileVitFormFillJavascript(MOBILEVIT_FILL_NCD);
+		}
+		return mobileVitFormFillJavascript(MOBILEVIT_FILL_ORAL);
+	}
+
+	/**
+	 * Injects AI results into the active form using {@link MobileVitFormFillConfig} field paths.
+	 */
+	private static String mobileVitFormFillJavascript(MobileVitFormFillConfig cfg) {
+		String setGroupFinalDiagnosisJs = cfg.setGroupFinalDiagnosis
+				? "chtSetXformPath(gsum+'" + cfg.groupFinalDiagnosisField + "',"
+						+ "currentDiagnosis?'suspicious':'non_suspicious');"
+				: "";
 		return
 			"try{" +
 			"(function(){" +
@@ -415,7 +464,7 @@ public class EmbeddedBrowserActivity extends Activity {
 			"function chtValueForElement(el,val,path){" +
 			"if(typeof val!=='string')return val;" +
 			"val=stripOnnx(val);" +
-			"if(path&&path.indexOf('ai_analysis_summary')>=0){return val;}" +
+			"if(path&&path.indexOf('" + cfg.summaryField + "')>=0){return val;}" +
 			"if(chtIsMultilineField(el)){" +
 			"return val.split('\\\\n').join(NL).split('\\r\\n').join(NL).split('\\r').join(NL);}" +
 			"return val.replace(/[\\r\\n]+/g,' ').replace(/\\s+/g,' ').trim();}" +
@@ -467,12 +516,12 @@ public class EmbeddedBrowserActivity extends Activity {
 			"}" +
 			"function inferSlotFromUrl(u){" +
 			"if(!u)return 0;" +
-			"var m=u.match(/photo[_/](\\\\d+)[_/]page/i)||u.match(/photo[_-]?(\\\\d+)[_/]page/i);" +
+			cfg.inferSlotUrlMatchJs +
 			"if(m)return parseInt(m[1],10);" +
 			"m=u.match(/[?&#]p(?:age)?[=:](\\\\d+)/i);if(m)return parseInt(m[1],10);" +
 			"m=u.match(/" + "\\/page\\/" + "(\\\\d+)\\\\b/i);if(m)return parseInt(m[1],10);" +
 			"return 0;}" +
-			"var storageKey='cht_oral_ca_ml_photo_idx';" +
+			"var storageKey='" + cfg.storagePrefix + "_photo_idx';" +
 			"var slotUrl=inferSlotFromUrl(d.pageUrl||'');" +
 			"var n=0;" +
 			"if(slotUrl>=1&&slotUrl<=8){n=slotUrl;sessionStorage.setItem(storageKey,String(n));}" +
@@ -483,14 +532,15 @@ public class EmbeddedBrowserActivity extends Activity {
 			"n=idx+1;" +
 			"sessionStorage.setItem(storageKey,String(idx+1));" +
 			"}" +
-			"var base='/data/photo_'+n+'_page/';" +
-			"chtSetXformPath(base+'ai_photo_'+n+'_suspicion',d.isSuspicious?'suspicious':'non_suspicious');" +
-			"var countKey='cht_oral_ca_ml_done_count';" +
+			"var base='" + cfg.photoPagePrefix + "'+n+'" + cfg.photoPageSuffix + "';" +
+			"chtSetXformPath(base+'" + cfg.suspicionFieldPrefix + "'+n+'" + cfg.suspicionFieldSuffix + "',"
+					+ "d.isSuspicious?'suspicious':'non_suspicious');" +
+			"var countKey='" + cfg.storagePrefix + "_done_count';" +
 			"var done=parseInt(sessionStorage.getItem(countKey)||'0',10);" +
 			"if(done<8)sessionStorage.setItem(countKey,String(done+1));" +
 			"done=Math.min(8,done+1);" +
-			"var gsum='/data/group_summary/';" +
-			"chtSetXformPath(gsum+'ai_analysis_status','Analyzed '+done+'/8 photos (latest: photo '+n+')');" +
+			"var gsum='" + cfg.summaryGroupPath + "';" +
+			"chtSetXformPath(gsum+'" + cfg.statusField + "','Analyzed '+done+'/8 photos (latest: photo '+n+')');" +
 			"function shortModelName(modelLabel){" +
 			"var s=stripOnnx(String(modelLabel||''));" +
 			"if(!s)return s;" +
@@ -507,7 +557,7 @@ public class EmbeddedBrowserActivity extends Activity {
 			"return shortModelName(s.model)+': '+s.probability.toFixed(2);}).join(SCORE_SEP);" +
 			"block+=' ('+scores+')';}" +
 			"return block;}" +
-			"var sumKey='cht_oral_ca_ml_summary_lines';" +
+			"var sumKey='" + cfg.storagePrefix + "_summary_lines';" +
 			"var lines=[];try{lines=JSON.parse(sessionStorage.getItem(sumKey)||'[]');}catch(e2){lines=[];}" +
 			"if(!Array.isArray(lines))lines=[];" +
 			"var line=formatPhotoBlock(n,d.isSuspicious,d.modelScores);" +
@@ -519,37 +569,106 @@ public class EmbeddedBrowserActivity extends Activity {
 			"var pb=parseInt((b.match(/^Photo (\\\\d+):/)||[0,0])[1],10);return pa-pb;});" +
 			"if(lines.length>8)lines=lines.slice(-8);" +
 			"sessionStorage.setItem(sumKey,JSON.stringify(lines));" +
-			"var diagnosisKey='cht_oral_ca_any_suspicious';" +
+			"var diagnosisKey='" + cfg.storagePrefix + "_any_suspicious';" +
 			"var currentDiagnosis=(sessionStorage.getItem(diagnosisKey)==='true')||d.isSuspicious;" +
 			"sessionStorage.setItem(diagnosisKey,String(currentDiagnosis));" +
 			"var summaryText=stripOnnx(lines.join(PHOTO_SEP));" +
 			"if(done>=8){summaryText+=PHOTO_SEP+'FINAL RESULT: '+(currentDiagnosis?'SUSPICIOUS':'NORMAL');}" +
-			"chtSetXformPath(gsum+'ai_analysis_summary',summaryText);" +
-			"setTimeout(function(){chtSetXformPath(gsum+'ai_analysis_summary',summaryText);},250);" +
-			"chtSetXformPath(gsum+'ai_final_diagnosis',currentDiagnosis?'suspicious':'non_suspicious');" +
+			"chtSetXformPath(gsum+'" + cfg.summaryField + "',summaryText);" +
+			"setTimeout(function(){chtSetXformPath(gsum+'" + cfg.summaryField + "',summaryText);},250);" +
+			setGroupFinalDiagnosisJs +
 			"if(done>=8){" +
-			"  chtSetXformPath('/data/final_ai_analysis_page/final_ai_suspicion',currentDiagnosis?'suspicious':'non_suspicious');" +
+			"  chtSetXformPath('" + cfg.finalSuspicionPath + "',currentDiagnosis?'suspicious':'non_suspicious');" +
 			"}" +
-			"chtSetXformPath(gsum+'ai_analysis_error','');" +
+			"chtSetXformPath(gsum+'" + cfg.errorField + "','');" +
 			"})();" +
 			"}catch(e3){console.error(e3);}";
 	}
 
-	/**
-	 * Clears ML round-robin / summary keys in {@code sessionStorage}. Call when the form is closed or from JS
-	 * {@code medicmobile_android.clearOralCancerMlSessionStorage()}.
-	 */
-	public void clearOralCancerMlSessionStorage() {
+	private static final class MobileVitFormFillConfig {
+		final String storagePrefix;
+		final String photoPagePrefix;
+		final String photoPageSuffix;
+		final String suspicionFieldPrefix;
+		final String suspicionFieldSuffix;
+		final String summaryGroupPath;
+		final String summaryField;
+		final String statusField;
+		final String errorField;
+		final boolean setGroupFinalDiagnosis;
+		final String groupFinalDiagnosisField;
+		final String finalSuspicionPath;
+		final String inferSlotUrlMatchJs;
+
+		MobileVitFormFillConfig(
+				String storagePrefix,
+				String photoPagePrefix,
+				String photoPageSuffix,
+				String suspicionFieldPrefix,
+				String suspicionFieldSuffix,
+				String summaryGroupPath,
+				String summaryField,
+				String statusField,
+				String errorField,
+				boolean setGroupFinalDiagnosis,
+				String groupFinalDiagnosisField,
+				String finalSuspicionPath,
+				String inferSlotUrlMatchJs) {
+			this.storagePrefix = storagePrefix;
+			this.photoPagePrefix = photoPagePrefix;
+			this.photoPageSuffix = photoPageSuffix;
+			this.suspicionFieldPrefix = suspicionFieldPrefix;
+			this.suspicionFieldSuffix = suspicionFieldSuffix;
+			this.summaryGroupPath = summaryGroupPath;
+			this.summaryField = summaryField;
+			this.statusField = statusField;
+			this.errorField = errorField;
+			this.setGroupFinalDiagnosis = setGroupFinalDiagnosis;
+			this.groupFinalDiagnosisField = groupFinalDiagnosisField;
+			this.finalSuspicionPath = finalSuspicionPath;
+			this.inferSlotUrlMatchJs = inferSlotUrlMatchJs;
+		}
+	}
+
+	private void clearMobileVitMlSessionStorage(MobileVitFormFillConfig cfg) {
+		String prefix = cfg.storagePrefix;
 		evaluateJavascript(
-			"(function(){var k=['cht_oral_ca_ml_photo_idx','cht_oral_ca_ml_done_count','cht_oral_ca_ml_summary_lines','cht_oral_ca_explicit_slot','cht_oral_ca_any_suspicious'];"
-				+ "k.forEach(function(x){try{sessionStorage.removeItem(x);}catch(e){}});})();",
+			"(function(){var k=['" + prefix + "_photo_idx','" + prefix + "_done_count','"
+					+ prefix + "_summary_lines','" + prefix + "_explicit_slot','" + prefix + "_any_suspicious'];"
+					+ "k.forEach(function(x){try{sessionStorage.removeItem(x);}catch(e){}});})();",
 			false);
 	}
 
+	/**
+	 * Clears ML sessionStorage for {@code oral_cancer_assessment}.
+	 * Call when the form is closed or from {@code medicmobile_android.clearOralCancerMlSessionStorage()}.
+	 */
+	public void clearOralCancerMlSessionStorage() {
+		clearMobileVitMlSessionStorage(MOBILEVIT_FILL_ORAL);
+	}
+
+	/**
+	 * Clears ML sessionStorage for the NCD form oral section ({@code oc_*} fields).
+	 * Call when the form is closed or from {@code medicmobile_android.clearNcdMlSessionStorage()}.
+	 */
+	public void clearNcdMlSessionStorage() {
+		clearMobileVitMlSessionStorage(MOBILEVIT_FILL_NCD);
+	}
+
 	void onWebViewPageFinishedForMobileVit(String url) {
-		String prev = this.lastWebViewUrlForOralMl;
-		this.lastWebViewUrlForOralMl = url;
-		if (prev != null && prev.contains(MOBILEVIT_TARGET_FORM_ID) && url != null && !url.contains(MOBILEVIT_TARGET_FORM_ID)) {
+		String prevUrl = this.lastWebViewUrlForMobileVit;
+		this.lastWebViewUrlForMobileVit = url;
+		String prevForm = resolveMobileVitFormId(prevUrl);
+		String curForm = resolveMobileVitFormId(url);
+		if (prevForm == null) {
+			return;
+		}
+		if (curForm != null && curForm.equals(prevForm)) {
+			return;
+		}
+		if (MOBILEVIT_FORM_NCD.equals(prevForm)) {
+			clearNcdMlSessionStorage();
+		} else {
 			clearOralCancerMlSessionStorage();
 		}
 	}

@@ -109,6 +109,18 @@ public class MedicAndroidJavascript {
 		}
 	}
 
+	/**
+	 * Clears MobileViT sessionStorage keys for the NCD form ({@code oc_*} oral section).
+	 */
+	@android.webkit.JavascriptInterface
+	public void clearNcdMlSessionStorage() {
+		try {
+			this.parent.clearNcdMlSessionStorage();
+		} catch (Exception ex) {
+			logException(ex);
+		}
+	}
+
 	@android.webkit.JavascriptInterface
 	public String getDataUsage() {
 		try {
