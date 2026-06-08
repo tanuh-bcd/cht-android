@@ -73,8 +73,6 @@ public class EmbeddedBrowserActivity extends Activity {
 
 	private static final MobileVitFormFillConfig MOBILEVIT_FILL_ORAL = new MobileVitFormFillConfig(
 			"cht_oral_ca_ml",
-			"/data/photo_", "_page/",
-			"ai_photo_", "_suspicion",
 			"/data/group_summary/",
 			"ai_analysis_summary", "ai_analysis_status", "ai_analysis_error",
 			true, "ai_final_diagnosis",
@@ -83,8 +81,6 @@ public class EmbeddedBrowserActivity extends Activity {
 
 	private static final MobileVitFormFillConfig MOBILEVIT_FILL_NCD = new MobileVitFormFillConfig(
 			"cht_ncd_ml",
-			"/data/oc_section_wrapper/oc_photo_", "_page/",
-			"oc_ai_photo_", "_suspicion",
 			"/data/oc_section_wrapper/oc_group_summary/",
 			"oc_ai_analysis_summary", "oc_ai_analysis_status", "oc_ai_analysis_error",
 			false, null,
@@ -432,7 +428,7 @@ public class EmbeddedBrowserActivity extends Activity {
 	 */
 	private static String mobileVitFormFillJavascript(MobileVitFormFillConfig cfg) {
 		String setGroupFinalDiagnosisJs = cfg.setGroupFinalDiagnosis
-				? "chtSetXformPath(gsum+'" + cfg.groupFinalDiagnosisField + "',"
+				? "  chtSetXformPath(gsum+'" + cfg.groupFinalDiagnosisField + "',"
 						+ "currentDiagnosis?'suspicious':'non_suspicious');"
 				: "";
 		return
@@ -532,15 +528,11 @@ public class EmbeddedBrowserActivity extends Activity {
 			"n=idx+1;" +
 			"sessionStorage.setItem(storageKey,String(idx+1));" +
 			"}" +
-			"var base='" + cfg.photoPagePrefix + "'+n+'" + cfg.photoPageSuffix + "';" +
-			"chtSetXformPath(base+'" + cfg.suspicionFieldPrefix + "'+n+'" + cfg.suspicionFieldSuffix + "',"
-					+ "d.isSuspicious?'suspicious':'non_suspicious');" +
 			"var countKey='" + cfg.storagePrefix + "_done_count';" +
 			"var done=parseInt(sessionStorage.getItem(countKey)||'0',10);" +
 			"if(done<8)sessionStorage.setItem(countKey,String(done+1));" +
 			"done=Math.min(8,done+1);" +
 			"var gsum='" + cfg.summaryGroupPath + "';" +
-			"chtSetXformPath(gsum+'" + cfg.statusField + "','Analyzed '+done+'/8 photos (latest: photo '+n+')');" +
 			"function shortModelName(modelLabel){" +
 			"var s=stripOnnx(String(modelLabel||''));" +
 			"if(!s)return s;" +
@@ -572,25 +564,22 @@ public class EmbeddedBrowserActivity extends Activity {
 			"var diagnosisKey='" + cfg.storagePrefix + "_any_suspicious';" +
 			"var currentDiagnosis=(sessionStorage.getItem(diagnosisKey)==='true')||d.isSuspicious;" +
 			"sessionStorage.setItem(diagnosisKey,String(currentDiagnosis));" +
+			"if(done>=8){" +
+			"chtSetXformPath(gsum+'" + cfg.statusField + "','Analyzed 8/8 photos');" +
 			"var summaryText=stripOnnx(lines.join(PHOTO_SEP));" +
-			"if(done>=8){summaryText+=PHOTO_SEP+'FINAL RESULT: '+(currentDiagnosis?'SUSPICIOUS':'NORMAL');}" +
+			"summaryText+=PHOTO_SEP+'FINAL RESULT: '+(currentDiagnosis?'SUSPICIOUS':'NORMAL');" +
 			"chtSetXformPath(gsum+'" + cfg.summaryField + "',summaryText);" +
 			"setTimeout(function(){chtSetXformPath(gsum+'" + cfg.summaryField + "',summaryText);},250);" +
 			setGroupFinalDiagnosisJs +
-			"if(done>=8){" +
 			"  chtSetXformPath('" + cfg.finalSuspicionPath + "',currentDiagnosis?'suspicious':'non_suspicious');" +
+			"  chtSetXformPath(gsum+'" + cfg.errorField + "','');" +
 			"}" +
-			"chtSetXformPath(gsum+'" + cfg.errorField + "','');" +
 			"})();" +
 			"}catch(e3){console.error(e3);}";
 	}
 
 	private static final class MobileVitFormFillConfig {
 		final String storagePrefix;
-		final String photoPagePrefix;
-		final String photoPageSuffix;
-		final String suspicionFieldPrefix;
-		final String suspicionFieldSuffix;
 		final String summaryGroupPath;
 		final String summaryField;
 		final String statusField;
@@ -602,10 +591,6 @@ public class EmbeddedBrowserActivity extends Activity {
 
 		MobileVitFormFillConfig(
 				String storagePrefix,
-				String photoPagePrefix,
-				String photoPageSuffix,
-				String suspicionFieldPrefix,
-				String suspicionFieldSuffix,
 				String summaryGroupPath,
 				String summaryField,
 				String statusField,
@@ -615,10 +600,6 @@ public class EmbeddedBrowserActivity extends Activity {
 				String finalSuspicionPath,
 				String inferSlotUrlMatchJs) {
 			this.storagePrefix = storagePrefix;
-			this.photoPagePrefix = photoPagePrefix;
-			this.photoPageSuffix = photoPageSuffix;
-			this.suspicionFieldPrefix = suspicionFieldPrefix;
-			this.suspicionFieldSuffix = suspicionFieldSuffix;
 			this.summaryGroupPath = summaryGroupPath;
 			this.summaryField = summaryField;
 			this.statusField = statusField;
